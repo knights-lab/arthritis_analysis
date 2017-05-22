@@ -1,11 +1,14 @@
 ---
 title: "R Notebook"
 output:
-  html_document: default
+  html_document: 
+    fig_width: 4
+    fig_height: 4
   html_notebook: default
 ---
 
-```{r, include=F}
+```{r setup, include=F}
+# set source files
 #source("https://bioconductor.org/biocLite.R")
 # If the previous command doesn't work, try http://
 #biocLite("edgeR")
@@ -26,10 +29,10 @@ dim(mapping_file)
 There are 180 cross-sectional samples.
 
 ```{r}
-# Do more summary statistics here: Abby???
 age = group_by(mapping_file, Diagnosis) %>%
  summarise(mean=mean(Age), sd=sd(Age))
 
+table(mapping_file$Diagnosis)
 table(mapping_file$Sex)
 age
 
@@ -39,8 +42,9 @@ geom_boxplot() + facet_wrap(~ as.factor(Diagnosis))
 ```
 
 ```{r}
-pairwise.wilcox.test(mapping_file$Age, as.factor(mapping_file$Diagnosis))
-pairwise.wilcox.test(mapping_file$BMI, as.factor(mapping_file$Diagnosis))
+pairwise.wilcox.test(mapping_file$Age, as.factor(mapping_file$Diagnosis), p.adjust.method = "fdr")
+pairwise.wilcox.test(mapping_file$BMI, as.factor(mapping_file$Diagnosis), p.adjust.method = "fdr")
+# wilcox.test
 ```
 
 ```{r}
@@ -57,6 +61,11 @@ rownames(keggtable) = sapply(split, function(x) paste(x[1:2], collapse="."))
 
 # Match samples to mapping file
 keggtable = keggtable[rownames(mapping_file), ]
+
+# Fil in NAs
+keggtable[is.na(keggtable)] = 0
+# Change to relative abundance
+keggtable = sweep(keggtable, 1, rowSums(keggtable), '/')
 # There should be 180 samples
 dim(keggtable)
 
@@ -101,23 +110,29 @@ taxatable.genus = summarize_taxonomy(taxatable, 6)
 # Filter by prevalence genus
 filter.species = prevalence_filt(taxatable.species)
 taxatable.species = taxatable.species[filter.species,]
+
+taxatable.species = sweep(taxatable.species, 2, colSums(taxatable.species), '/')
 dim(taxatable.species)
 
 # Filter by prevalence genus
 filter.genus = prevalence_filt(taxatable.genus)
 taxatable.genus = taxatable.genus[filter.genus,]
+
+taxatable.genus = sweep(taxatable.genus, 2, colSums(taxatable.genus), '/')
 dim(taxatable.genus)
 ```
 
 ```{r}
-# # Source Dan's wrapper
+# # # Source Dan's wrapper
 # source('../src/wrap.edgeR.R')
 # 
 # taxatable.genus = t(taxatable.genus)
 # taxatable.genus = as.matrix(taxatable.genus)
 # # Shorten names
 # # colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
-# result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus)
+# # result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus)
+# result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus, estimate.trended.disp = T)
+# 
 # # Error in Y[ix, ] : (subscript) logical subscript too long
 # topTags(result)
 # pvals <- topTags(result,n=Inf)$table[,'PValue']
@@ -125,11 +140,10 @@ dim(taxatable.genus)
 ```
 
 ```{r}
-# makes a gradient from red to blue
-# my.colors <- colorRampPalette(c('red','blue'))(10)
+taxatable.genus = t(taxatable.genus)
 
 # get Bray-Curtis distances (default for Vegan)
-d.bray <- vegdist(t(taxatable.genus))
+d.bray <- vegdist(taxatable.genus)
 
 # Bray-Curtis principal coords
 pc.bray <- cmdscale(d.bray,k=2)
@@ -138,12 +152,19 @@ pc.bray <- cmdscale(d.bray,k=2)
 plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
 plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis_broad_cat))
 
+db = betadisper(d.bray, mapping_file$Diagnosis)
+permutest(db, pairwise=F)
+adonis(as.matrix(d.bray) ~ Diagnosis, data=mapping_file, perm=1e4)
 
-adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
-adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
+db = betadisper(d.bray, mapping_file$Diagnosis_broad_cat)
+permutest(db, pairwise=F)
+adonis(d.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e4)
 ```
 
 ```{r}
+# Settings for figures and size
+# Talk to gabe
+# Work with ggplot and colormaps
 taxatable.species = t(taxatable.species)
 taxatable.species = as.matrix(taxatable.species)
 # # Shorten names
@@ -161,36 +182,45 @@ taxatable.species = as.matrix(taxatable.species)
 d.bray <- vegdist(taxatable.species)
 
 # Bray-Curtis principal coords
-pc.bray <- cmdscale(d.bray,k=2)
+pc.bray <- cmdscale(d.bray, k=2)
 
 # Plot Bray-Curtis PCoA
-plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
-plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis_broad_cat))
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis), pch=16)
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis_broad_cat), pch=16)
 
+db = betadisper(d.bray, mapping_file$Diagnosis)
+permutest(db, pairwise=F)
+adonis(as.matrix(d.bray) ~ Diagnosis, data=mapping_file, perm=1e4)
 
-adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
-adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
+db = betadisper(d.bray, mapping_file$Diagnosis_broad_cat)
+permutest(db, pairwise=F)
+adonis(d.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e4)
+# beta dispersion there is a funciton
 ```
 
 Kruskal-Wallis comparisons on the KEGG results between the 4 groups of patients (IBD, IBD-A, RA, controls).
 
 ```{r}
-keggtable[is.na(keggtable)] = 0
 keggtable.filt = keggtable[, colMeans(keggtable > 0) >= .1]
 
 pvals = apply(keggtable.filt, 2, function(x) {kruskal.test(x, as.factor(mapping_file$Diagnosis))$p.val})
 
+# use the 'by' adjustment
 qvals <- p.adjust(pvals, 'fdr')
 
 # print the lowest 10 q-values
 sort(qvals)[1:10]
+# use the significant ones from here, don't correct??
+# Now that we have corrected properly, don't need to correct again.
+significant.kos = names(qvals[qvals < .001])
 ```
 
-Pairwise non-parametric comparison between each group.
+Pairwise non-parametric comparison between each group. We want to know which paired category, now that we know that a KO is significantly different across groups.
 
 ```{r pairwise, warning=F}
 # Some ties exist
-pairwise.pvals <- apply(keggtable.filt, 2, function(x) {pairwise.wilcox.test(x, as.factor(mapping_file$Diagnosis))})
+pairwise.pvals <- apply(keggtable.filt[, significant.kos], 2, function(x) {pairwise.wilcox.test(x, as.factor(mapping_file$Diagnosis), p.adjust.method =  "none", exact=F)})
+save(pairwise.pvals, file = "pairwise.pvals.Rdata")
 ```
 
 ```{r}
@@ -203,9 +233,6 @@ pc.bray <- cmdscale(d.bray, k=2)
 # Plot Bray-Curtis PCoA
 plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
 
-adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
+# betadisper
+adonis(d.bray ~ Diagnosis, data=mapping_file, perm=1e5)
 ```
-
-
-
-
