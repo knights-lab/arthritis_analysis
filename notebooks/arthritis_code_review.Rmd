@@ -1,31 +1,49 @@
 ---
 title: "R Notebook"
 output:
-  html_notebook: default
   html_document: default
+  html_notebook: default
 ---
 
 ```{r, include=F}
-source("https://bioconductor.org/biocLite.R")
+#source("https://bioconductor.org/biocLite.R")
 # If the previous command doesn't work, try http://
-biocLite("edgeR")
-
+#biocLite("edgeR")
+require(edgeR)
 require(vegan)
 require(dplyr)
+require(ggplot2)
 ```
+
+Load the mapping file.
 
 ```{r}
 # Load the datasets
 mapping_file = read.delim("../data/Shotgun_Master_MappingFile_noAbx.txt", sep="\t", row=1, as.is=T)
 dim(mapping_file)
+```
 
+There are 180 cross-sectional samples.
+
+```{r}
 # Do more summary statistics here: Abby???
 age = group_by(mapping_file, Diagnosis) %>%
  summarise(mean=mean(Age), sd=sd(Age))
 
 table(mapping_file$Sex)
+age
 
+# compare different sample populations across various temperatures
+ggplot(mapping_file, aes(x = as.factor(Sex), y=BMI)) +
+geom_boxplot() + facet_wrap(~ as.factor(Diagnosis))
+```
 
+```{r}
+pairwise.wilcox.test(mapping_file$Age, as.factor(mapping_file$Diagnosis))
+pairwise.wilcox.test(mapping_file$BMI, as.factor(mapping_file$Diagnosis))
+```
+
+```{r}
 otutable = read.delim("../data/otutable.txt", sep="\t", row=1, as.is=T)
 taxatable = read.delim("../data/taxatable.txt", sep="\t", row=1, as.is=T)
 
@@ -92,18 +110,18 @@ dim(taxatable.genus)
 ```
 
 ```{r}
-# Source Dan's wrapper
-source('../src/wrap.edgeR.R')
-
-taxatable.genus = t(taxatable.genus)
-taxatable.genus = as.matrix(taxatable.genus)
-# Shorten names
-# colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
-result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus)
-# Error in Y[ix, ] : (subscript) logical subscript too long
-topTags(result)
-pvals <- topTags(result,n=Inf)$table[,'PValue']
-plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
+# # Source Dan's wrapper
+# source('../src/wrap.edgeR.R')
+# 
+# taxatable.genus = t(taxatable.genus)
+# taxatable.genus = as.matrix(taxatable.genus)
+# # Shorten names
+# # colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
+# result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus)
+# # Error in Y[ix, ] : (subscript) logical subscript too long
+# topTags(result)
+# pvals <- topTags(result,n=Inf)$table[,'PValue']
+# plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
 ```
 
 ```{r}
@@ -111,7 +129,7 @@ plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0
 # my.colors <- colorRampPalette(c('red','blue'))(10)
 
 # get Bray-Curtis distances (default for Vegan)
-d.bray <- vegdist(taxatable.genus)
+d.bray <- vegdist(t(taxatable.genus))
 
 # Bray-Curtis principal coords
 pc.bray <- cmdscale(d.bray,k=2)
@@ -128,13 +146,13 @@ adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
 ```{r}
 taxatable.species = t(taxatable.species)
 taxatable.species = as.matrix(taxatable.species)
-# Shorten names
-# colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
-result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.species)
-# Error in Y[ix, ] : (subscript) logical subscript too long
-topTags(result)
-pvals <- topTags(result,n=Inf)$table[,'PValue']
-plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
+# # Shorten names
+# # colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
+# result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.species)
+# # Error in Y[ix, ] : (subscript) logical subscript too long
+# topTags(result)
+# pvals <- topTags(result,n=Inf)$table[,'PValue']
+# plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
 
 # makes a gradient from red to blue
 # my.colors <- colorRampPalette(c('red','blue'))(10)
@@ -154,7 +172,8 @@ adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
 adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
 ```
 
-Kruskal-Wallis comparisons on the KEGG results between the 4 groups of patients (IBD, IBD-A, RA, controls),.
+Kruskal-Wallis comparisons on the KEGG results between the 4 groups of patients (IBD, IBD-A, RA, controls).
+
 ```{r}
 keggtable[is.na(keggtable)] = 0
 keggtable.filt = keggtable[, colMeans(keggtable > 0) >= .1]
