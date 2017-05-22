@@ -212,7 +212,7 @@ qvals <- p.adjust(pvals, 'fdr')
 sort(qvals)[1:10]
 # use the significant ones from here, don't correct??
 # Now that we have corrected properly, don't need to correct again.
-significant.kos = names(qvals[qvals < .001])
+significant.kos = names(qvals[qvals < .05])
 ```
 
 Pairwise non-parametric comparison between each group. We want to know which paired category, now that we know that a KO is significantly different across groups.
@@ -234,5 +234,6 @@ pc.bray <- cmdscale(d.bray, k=2)
 plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
 
 # betadisper
+betadisper(d.bray, mapping_file$Diagnosis)
 adonis(d.bray ~ Diagnosis, data=mapping_file, perm=1e5)
 ```
