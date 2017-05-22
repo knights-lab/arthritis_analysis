@@ -1,0 +1,192 @@
+---
+title: "R Notebook"
+output:
+  html_notebook: default
+  html_document: default
+---
+
+```{r, include=F}
+source("https://bioconductor.org/biocLite.R")
+# If the previous command doesn't work, try http://
+biocLite("edgeR")
+
+require(vegan)
+require(dplyr)
+```
+
+```{r}
+# Load the datasets
+mapping_file = read.delim("../data/Shotgun_Master_MappingFile_noAbx.txt", sep="\t", row=1, as.is=T)
+dim(mapping_file)
+
+# Do more summary statistics here: Abby???
+age = group_by(mapping_file, Diagnosis) %>%
+ summarise(mean=mean(Age), sd=sd(Age))
+
+table(mapping_file$Sex)
+
+
+otutable = read.delim("../data/otutable.txt", sep="\t", row=1, as.is=T)
+taxatable = read.delim("../data/taxatable.txt", sep="\t", row=1, as.is=T)
+
+keggtable = read.delim("../data/david_kegg_mapping.csv", sep=",", row=1, as.is=T)
+
+# Filter Kegg Table
+names = rownames(keggtable)
+split = strsplit(names, "[.]")
+# Remove extra periods
+rownames(keggtable) = sapply(split, function(x) paste(x[1:2], collapse="."))
+
+# Match samples to mapping file
+keggtable = keggtable[rownames(mapping_file), ]
+# There should be 180 samples
+dim(keggtable)
+
+
+names = colnames(taxatable)
+split = strsplit(names, "[.]")
+# Remove extra periods
+colnames(taxatable) = sapply(split, function(x) paste(x[1:2], collapse="."))
+
+# Match samples to mapping file
+taxatable = taxatable[,rownames(mapping_file)]
+dim(taxatable)
+```
+
+```{r}
+# features x samples
+summarize_taxonomy = function(data, level=3) {
+  split <- strsplit(data$taxonomy, ";")
+  drop_rows <- sapply(split, function(x) length(x) >= level)
+  split <- split[drop_rows]
+  data <- data[drop_rows,]
+  data$taxonomy <- sapply(split,function(x) paste(x[1:level], collapse=";"))
+
+  sample_no <- ncol(data)-1    # No. samples = no. columns (- 1 for taxonomy col)
+
+  data <- aggregate(data[,1:sample_no], by=list(data$taxonomy), FUN=sum)
+  rownames(data) <- data[,1]    # Set the rownames to the taxonomy column
+  data[,-1]
+}
+
+# feature x samples
+prevalence_filt <- function(data, thresh=.1) {
+  rowMeans(data > 0) >= thresh
+}
+
+taxatable$taxonomy = rownames(taxatable)
+
+
+taxatable.species = summarize_taxonomy(taxatable, 7)
+taxatable.genus = summarize_taxonomy(taxatable, 6)
+
+# Filter by prevalence genus
+filter.species = prevalence_filt(taxatable.species)
+taxatable.species = taxatable.species[filter.species,]
+dim(taxatable.species)
+
+# Filter by prevalence genus
+filter.genus = prevalence_filt(taxatable.genus)
+taxatable.genus = taxatable.genus[filter.genus,]
+dim(taxatable.genus)
+```
+
+```{r}
+# Source Dan's wrapper
+source('../src/wrap.edgeR.R')
+
+taxatable.genus = t(taxatable.genus)
+taxatable.genus = as.matrix(taxatable.genus)
+# Shorten names
+# colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
+result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.genus)
+# Error in Y[ix, ] : (subscript) logical subscript too long
+topTags(result)
+pvals <- topTags(result,n=Inf)$table[,'PValue']
+plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
+```
+
+```{r}
+# makes a gradient from red to blue
+# my.colors <- colorRampPalette(c('red','blue'))(10)
+
+# get Bray-Curtis distances (default for Vegan)
+d.bray <- vegdist(taxatable.genus)
+
+# Bray-Curtis principal coords
+pc.bray <- cmdscale(d.bray,k=2)
+
+# Plot Bray-Curtis PCoA
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis_broad_cat))
+
+
+adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
+adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
+```
+
+```{r}
+taxatable.species = t(taxatable.species)
+taxatable.species = as.matrix(taxatable.species)
+# Shorten names
+# colnames(taxatable.genus) <- sapply(strsplit(colnames(taxatable.genus),';'),function(xx) # paste(paste(substr(xx[-c(1,length(xx))],4,7),collapse=';'),substring(xx[length(xx)],4),sep=';'))
+result <- glm.edgeR(x=as.factor(mapping_file$Diagnosis), Y=taxatable.species)
+# Error in Y[ix, ] : (subscript) logical subscript too long
+topTags(result)
+pvals <- topTags(result,n=Inf)$table[,'PValue']
+plot(-log10(seq(0,1,length=length(pvals)+1)[-1]), -log10(sort(pvals))); abline(0,1)
+
+# makes a gradient from red to blue
+# my.colors <- colorRampPalette(c('red','blue'))(10)
+
+# get Bray-Curtis distances (default for Vegan)
+d.bray <- vegdist(taxatable.species)
+
+# Bray-Curtis principal coords
+pc.bray <- cmdscale(d.bray,k=2)
+
+# Plot Bray-Curtis PCoA
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis_broad_cat))
+
+
+adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
+adonis(pc.bray ~ Diagnosis_broad_cat, data=mapping_file, perm=1e3)
+```
+
+Kruskal-Wallis comparisons on the KEGG results between the 4 groups of patients (IBD, IBD-A, RA, controls),.
+```{r}
+keggtable[is.na(keggtable)] = 0
+keggtable.filt = keggtable[, colMeans(keggtable > 0) >= .1]
+
+pvals = apply(keggtable.filt, 2, function(x) {kruskal.test(x, as.factor(mapping_file$Diagnosis))$p.val})
+
+qvals <- p.adjust(pvals, 'fdr')
+
+# print the lowest 10 q-values
+sort(qvals)[1:10]
+```
+
+Pairwise non-parametric comparison between each group.
+
+```{r pairwise, warning=F}
+# Some ties exist
+pairwise.pvals <- apply(keggtable.filt, 2, function(x) {pairwise.wilcox.test(x, as.factor(mapping_file$Diagnosis))})
+```
+
+```{r}
+# get Bray-Curtis distances (default for Vegan)
+d.bray <- vegdist(keggtable.filt)
+
+# Bray-Curtis principal coords
+pc.bray <- cmdscale(d.bray, k=2)
+
+# Plot Bray-Curtis PCoA
+plot(pc.bray[,1], pc.bray[,2], col=as.factor(mapping_file$Diagnosis))
+
+adonis(pc.bray ~ Diagnosis, data=mapping_file, perm=1e3)
+```
+
+
+
+
