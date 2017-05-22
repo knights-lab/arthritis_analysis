@@ -16,9 +16,9 @@ Steps in the works
 * Summary Statistics
   * Are there confounders(age, BMI, sex) between groups
 * Taxonomy tables
-** Species and Genus
-** Bray-Curtis PCoA
-** Adonis
+  * Species and Genus
+  * Bray-Curtis PCoA
+  * Adonis
 * Kegg Table
-** Kruskal-Wallis
-** Mann-Whitney (Wilcoxon)
+  * Kruskal-Wallis
+  * Mann-Whitney (Wilcoxon)
